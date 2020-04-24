@@ -14,8 +14,6 @@ corona_info = str(data, 'utf-8')
 corona = corona_info.split(' ')
 
 
-
-
 #write csv file from github data
 with open('corona.csv', 'w', newline = '') as f:
     write = csv.writer(f)
@@ -104,46 +102,8 @@ write_db(get_date_data(us_corona_info)[60:], get_cases_data(us_corona_info)[60:]
 write_db(get_date_data(us_corona_info)[80:], get_cases_data(us_corona_info)[80:], get_deaths_data(us_corona_info)[80:])
 
 
-import matplotlib
-import matplotlib.pyplot as plt
-
-#read through corona.csv to make each column into a list
-with open('corona.csv', 'r') as csv_file:
-    csv_read = csv.reader(csv_file, delimiter = ',')
-    date = []
-    num_cases = []
-    num_deaths = []
-    for lines in csv_read:
-        date.append(lines[0])
-        num_cases.append(lines[1])
-        num_deaths.append(lines[2])
-    date_list = date[1:]
-    cases_list = num_cases[1:]
-    cases_list = [int(i) for i in cases_list]
-    deaths_list = num_deaths[1:]
-    deaths_list = [int(i) for i in deaths_list]
-    
-    y = date_list
-    d1 = cases_list
-    d2 = deaths_list
-
-    fig, ax = plt.subplots()
-    ax.plot(y, d1, 'b-', label = "Number of Cases")
-    ax.plot(y, d2, 'g-', label = "Number of Deaths")
-    ax.legend()
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Number of People')
-    ax.set_title('COVID-19 in the USA')
-    plt.xticks(rotation = 'vertical', fontsize = 4)
-    ax.grid()
-    # save the line graph
-    fig.savefig("test.png")
-
-    # show the line graph
-    plt.show()
-
-        
 #calculation
+#function to pull out data from database table
 def get_db_info():
     conn = sqlite3.connect('/Users/jordanbriney/Desktop/Coronavirus.db')
     cur = conn.cursor()
@@ -153,6 +113,7 @@ def get_db_info():
 
 lst_uscases = get_db_info()
 
+#function to make list of cases
 def make_cases_lst(lst1):
     cases = []
     for info in lst1:
@@ -161,6 +122,7 @@ def make_cases_lst(lst1):
 
 cases1 = make_cases_lst(lst_uscases)
 
+#fucntion to make list of deaths
 def make_deaths_lst(lst1):
     deaths = []
     for info in lst1:
@@ -169,12 +131,84 @@ def make_deaths_lst(lst1):
 
 deaths1 = make_deaths_lst(lst_uscases)
 
+#function to do actual calucation and make a new list of data
 def num_deaths_per_cases(info1, info2):
     average = [int(i)/int(j) for i, j in zip(info1, info2)]
     return average
 
 deaths_per_cases = num_deaths_per_cases(deaths1, cases1)
-print(deaths_per_cases)
+
+we_need = csv_reader('calculations.csv')
+
+#read through csv file and return a list of all of the dates 
+def get_dates(info):
+    dates = []
+    for val in info:
+        val = val.split(',')
+        dates.append(val[0])
+    return dates
+
+#a list of all of the dates
+coronadates = get_dates(we_need)
 
 
+#read through csv file and return a list of the # of cases
+def get_avg(info):
+    cases = []
+    for val in info:
+        val = val.split(',')
+        cases.append(val[1])
+    return cases
 
+the_rates = get_avg(we_need)
+
+#create new table from calculation data
+def new_table():
+    conn = sqlite3.connect('/Users/jordanbriney/Desktop/Coronavirus.db')
+    cur = conn.cursor()
+    cur.execute('DROP TABLE IF EXISTS DeathRate')
+    cur.execute("CREATE TABLE IF NOT EXISTS DeathRate(date TEXT, rate FLOAT)")
+
+
+def write_table(coronadates, the_rates): 
+    try:
+        conn = sqlite3.connect('/Users/jordanbriney/Desktop/Coronavirus.db')
+        cur = conn.cursor()
+        for x in range(20):
+            date = coronadates[x]
+            rate = the_rates[x]
+            cur.execute("INSERT INTO DeathRate(date, rate) VALUES (?,?)", (date, rate))
+            conn.commit()
+        print('Success')
+        cur.close()
+    except:
+        print("Data inputed in table but not enough data for 20 new rows")
+
+new_table()
+write_table(coronadates, the_rates)
+write_table(coronadates[20:], the_rates[20:])
+write_table(coronadates[40:], the_rates[40:])
+write_table(coronadates[60:], the_rates[60:])
+write_table(coronadates[80:], the_rates[80:])
+
+#create a database join
+def make_a_join():
+    try:
+        conn = sqlite3.connect('/Users/jordanbriney/Desktop/Coronavirus.db')
+        cur = conn.cursor()
+        cur.execute('SELECT USCases.date, USCases.cases, USCases.deaths, DeathRate.date, DeathRate.rate FROM USCases INNER JOIN DeathRate ON USCases.date = DeathRate.date')
+        data = cur.fetchall()
+        cur.execute("CREATE TABLE IF NOT EXISTS Allinfo (date TEXT, cases INTEGER, deaths INTEGER, rate FLOAT)")
+        for row in data:
+            date = row[0]
+            cases = row[1]
+            deaths = row[2]
+            rate = row[4]
+            cur.execute("INSERT INTO Allinfo (date, cases, deaths, rate) VALUES (?,?,?,?)", (date, cases, deaths, rate))
+        conn.commit()
+        print("Success")
+        cur.close()
+    except:
+        print("Fail")
+
+make_a_join()
